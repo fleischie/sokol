@@ -110,8 +110,8 @@
                         | Windows | macOS | Linux |  iOS  | Android | UWP  | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+------+-------+-------
     gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---  | ---   | ---
-    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | ---  | TODO  | YES
-    gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---  | ---   | YES
+    gles2/webgl         | ---     | ---   | ---²  | YES   | YES     | ---  | TODO  | YES
+    gles3/webgl2        | ---     | ---   | ---²  | YES   | YES     | ---  | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---   | ---
     KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
@@ -123,29 +123,32 @@
     MOUSE_MOVE          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     MOUSE_ENTER         | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     MOUSE_LEAVE         | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    TOUCHES_BEGAN       | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
-    TOUCHES_MOVED       | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
-    TOUCHES_ENDED       | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
-    TOUCHES_CANCELLED   | ---     | ---   | ---   | YES   | YES     | TODO | ---   | YES
+    TOUCHES_BEGAN       | ---     | ---   | YES¹  | YES   | YES     | TODO | ---   | YES
+    TOUCHES_MOVED       | ---     | ---   | YES¹  | YES   | YES     | TODO | ---   | YES
+    TOUCHES_ENDED       | ---     | ---   | YES¹  | YES   | YES     | TODO | ---   | YES
+    TOUCHES_CANCELLED   | ---     | ---   | YES¹  | YES   | YES     | TODO | ---   | YES
     RESIZED             | YES     | YES   | YES   | YES   | YES     | YES  | ---   | YES
-    ICONIFIED           | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
-    RESTORED            | YES     | YES   | YES   | ---   | ---     | YES  | ---   | ---
+    ICONIFIED           | YES     | YES   | YES²  | ---   | ---     | YES  | ---   | ---
+    RESTORED            | YES     | YES   | YES²  | ---   | ---     | YES  | ---   | ---
     SUSPENDED           | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     RESUMED             | ---     | ---   | ---   | YES   | YES     | YES  | ---   | TODO
     QUIT_REQUESTED      | YES     | YES   | YES   | ---   | ---     | ---  | TODO  | YES
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???   | ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    windowed            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
+    windowed            | YES     | YES   | YES²  | ---   | ---     | YES  | TODO  | YES
     fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | TODO  | ---
     mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | TODO
-    mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
+    mouse lock          | YES     | YES   | YES²  | ---   | ---     | TODO | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
-    swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
-    high-dpi            | YES     | YES   | TODO  | YES   | YES     | YES  | TODO  | YES
-    clipboard           | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | YES
-    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
-    drag'n'drop         | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
+    swap interval       | YES     | YES   | YES²  | YES   | TODO    | ---  | TODO  | YES
+    high-dpi            | YES     | YES   | YES¹  | YES   | YES     | YES  | TODO  | YES
+    clipboard           | YES     | YES   | TODO² | ---   | ---     | TODO | ---   | YES
+    MSAA                | YES     | YES   | YES²  | YES   | YES     | TODO | TODO  | YES
+    drag'n'drop         | YES     | YES   | YES²  | ---   | ---     | TODO | TODO  | YES
+
+    ¹: Only on the wayland path.
+    ²: Left to do on the wayland path.
 
     TODO
     ====
