@@ -80,7 +80,7 @@
     - on iOS with Metal: Foundation, UIKit, Metal, MetalKit
     - on iOS with GL: Foundation, UIKit, OpenGLES, GLKit
     - on Linux with X11: X11, Xi, Xcursor, GL, dl, pthread, m(?)
-    - on Linux with wayland: GL, EGL, wayland-egl, wayland-client, xkbcommon
+    - on Linux with wayland: GL, EGL, wayland-egl, wayland-client, wayland-cursor, xkbcommon
     - on Android: GLESv3, EGL, log, android
     - on Windows: no action needed, libs are defined in-source via pragma-comment-lib
 
@@ -1599,6 +1599,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <sys/mman.h>
         #include <unistd.h>
         #include <wayland-client.h>
+        #include <wayland-cursor.h>
         #include <wayland-egl.h>
         #include <xkbcommon/xkbcommon.h>
 
@@ -1974,6 +1975,7 @@ typedef struct {
     struct wl_pointer* pointer;
     struct wl_registry* registry;
     struct wl_seat* seat;
+    struct wl_shm* shm;
     struct wl_surface* surface;
     struct wl_touch* touch;
     struct xdg_surface* shell;
@@ -1995,6 +1997,11 @@ typedef struct {
     struct xkb_state* xkb_state;
     struct xkb_keymap* xkb_keymap;
     bool repeat_mask[SAPP_MAX_KEYCODES];
+
+    /* pointer/cursor related data */
+    struct wl_cursor *cursor;
+    struct wl_surface *cursor_surface;
+    uint32_t serial;
 
     /* accumulated touch state */
     struct _sapp_wl_touchpoint touchpoints[SAPP_MAX_TOUCHPOINTS];
@@ -10554,8 +10561,10 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     if (NULL != _sapp.wl.event_queue) wl_event_queue_destroy(_sapp.wl.event_queue);
     if (NULL != _sapp.wl.touch) wl_touch_destroy(_sapp.wl.touch);
     if (NULL != _sapp.wl.pointer) wl_pointer_destroy(_sapp.wl.pointer);
+    if (NULL != _sapp.wl.cursor_surface) wl_surface_destroy(_sapp.wl.cursor_surface);
     if (NULL != _sapp.wl.keyboard) wl_keyboard_destroy(_sapp.wl.keyboard);
     if (NULL != _sapp.wl.seat) wl_seat_destroy(_sapp.wl.seat);
+    if (NULL != _sapp.wl.shm) wl_shm_destroy(_sapp.wl.shm);
 
     if (NULL != _sapp.wl.xkb_keymap) xkb_keymap_unref(_sapp.wl.xkb_keymap);
     if (NULL != _sapp.wl.xkb_state) xkb_state_unref(_sapp.wl.xkb_state);
@@ -10564,6 +10573,14 @@ _SOKOL_PRIVATE void _sapp_wl_cleanup(void) {
     epoll_ctl(_sapp.wl.epoll_fd, EPOLL_CTL_DEL, _sapp.wl.event_fd, NULL);
     close(_sapp.wl.event_fd);
     close(_sapp.wl.epoll_fd);
+}
+
+_SOKOL_PRIVATE void _sapp_wl_show_mouse(bool show, uint32_t serial) {
+    if (show && NULL != _sapp.wl.cursor_surface && NULL != _sapp.wl.cursor) {
+        wl_pointer_set_cursor(_sapp.wl.pointer, serial, _sapp.wl.cursor_surface, _sapp.wl.cursor->images[0]->hotspot_x, _sapp.wl.cursor->images[0]->hotspot_y);
+    } else {
+        wl_pointer_set_cursor(_sapp.wl.pointer, serial, NULL, 0, 0);
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_wl_lock_mouse(bool lock) {
@@ -10581,6 +10598,15 @@ _SOKOL_PRIVATE void _sapp_wl_lock_mouse(bool lock) {
          *          - use pointer-constaints protocol extension */
     }
 }
+
+_SOKOL_PRIVATE void _sapp_wl_buffer_release(void *data, struct wl_buffer *buffer) {
+  _SOKOL_UNUSED(data);
+  wl_buffer_destroy(buffer);
+}
+
+_SOKOL_PRIVATE const struct wl_buffer_listener _sapp_wl_buffer_listener = {
+  .release = _sapp_wl_buffer_release,
+};
 
 _SOKOL_PRIVATE void _sapp_wl_set_fullscreen(bool is_fullscreen) {
     if (NULL == _sapp.wl.toplevel) {
@@ -10709,6 +10735,7 @@ _SOKOL_PRIVATE void _sapp_wl_toggle_fullscreen() {
 
 _SOKOL_PRIVATE void _sapp_wl_wm_base_ping(void* data, struct xdg_wm_base* wm_base, uint32_t serial) {
     _SOKOL_UNUSED(data);
+    _sapp.wl.serial = serial;
     xdg_wm_base_pong(wm_base, serial);
 }
 
@@ -10721,6 +10748,8 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_key(void* data, struct wl_keyboard* keyboa
     _SOKOL_UNUSED(keyboard);
     _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(time);
+
+    _sapp.wl.serial = serial;
 
     xkb_keysym_t sym = xkb_state_key_get_one_sym(_sapp.wl.xkb_state, key + 8);
     sapp_keycode code = _sapp_wl_translate_key(sym);
@@ -10746,6 +10775,8 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_key(void* data, struct wl_keyboard* keyboa
 
 _SOKOL_PRIVATE void _sapp_wl_keyboard_enter(void* data, struct wl_keyboard* keyboard, uint32_t serial, struct wl_surface* surface, struct wl_array* keys) {
     _SOKOL_UNUSED(surface);
+
+    _sapp.wl.serial = serial;
 
     uint32_t* key;
     wl_array_for_each(key, keys) {
@@ -10785,12 +10816,16 @@ _SOKOL_PRIVATE void _sapp_wl_keyboard_leave(void* data, struct wl_keyboard* keyb
     _SOKOL_UNUSED(keyboard);
     _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(surface);
+
+    _sapp.wl.serial = serial;
 }
 
 _SOKOL_PRIVATE void _sapp_wl_keyboard_modifiers(void* data, struct wl_keyboard* keyboard, uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked, uint32_t group) {
     _SOKOL_UNUSED(data);
     _SOKOL_UNUSED(keyboard);
     _SOKOL_UNUSED(serial);
+
+    _sapp.wl.serial = serial;
 
     xkb_state_update_mask(_sapp.wl.xkb_state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
 }
@@ -10845,6 +10880,8 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_button(void* data, struct wl_pointer* point
     _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(time);
 
+    _sapp.wl.serial = serial;
+
     sapp_event_type type = SAPP_EVENTTYPE_INVALID;
     switch (button_state) {
         case WL_POINTER_BUTTON_STATE_PRESSED:
@@ -10880,7 +10917,10 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_enter(void* data, struct wl_pointer* pointe
     _SOKOL_UNUSED(pointer);
     _SOKOL_UNUSED(surface);
 
+    _sapp.wl.serial = serial;
+
     _sapp_wl_mouse_event(SAPP_EVENTTYPE_MOUSE_ENTER, SAPP_MOUSEBUTTON_INVALID, _sapp_wl_get_modifiers());
+    _sapp_wl_show_mouse(_sapp.mouse.shown, serial);
 }
 
 _SOKOL_PRIVATE void _sapp_wl_pointer_frame(void* data, struct wl_pointer* pointer) {
@@ -10893,6 +10933,8 @@ _SOKOL_PRIVATE void _sapp_wl_pointer_leave(void* data, struct wl_pointer* pointe
     _SOKOL_UNUSED(pointer);
     _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(surface);
+
+    _sapp.wl.serial = serial;
 
     /* unlock mouse on leave event */
     if (_sapp.mouse.locked) {
@@ -10947,6 +10989,8 @@ _SOKOL_PRIVATE void _sapp_wl_touch_down(void* data, struct wl_touch* touch, uint
     _SOKOL_UNUSED(time);
     _SOKOL_UNUSED(surface);
 
+    _sapp.wl.serial = serial;
+
     struct _sapp_wl_touchpoint* point = _sapp_wl_get_touchpoint(id);
     if (NULL != point) {
         point->x = (float) wl_fixed_to_double(x);
@@ -10994,6 +11038,8 @@ _SOKOL_PRIVATE void _sapp_wl_touch_up(void* data, struct wl_touch* touch, uint32
     _SOKOL_UNUSED(serial);
     _SOKOL_UNUSED(time);
 
+    _sapp.wl.serial = serial;
+
     _sapp_wl_get_touchpoint(id);
     _sapp_wl_touch_event(SAPP_EVENTTYPE_TOUCHES_ENDED, id, _sapp_wl_get_modifiers());
 }
@@ -11026,6 +11072,20 @@ _SOKOL_PRIVATE void _sapp_wl_seat_handle_capabilities(void* data, struct wl_seat
     if (has_pointer && NULL == _sapp.wl.pointer) {
         _sapp.wl.pointer = wl_seat_get_pointer(seat);
         wl_pointer_add_listener(_sapp.wl.pointer, &_sapp_wl_pointer_listener, NULL);
+
+        if (NULL == _sapp.wl.cursor_surface) {
+            struct wl_cursor_theme *cursor_theme = wl_cursor_theme_load(NULL, 24, _sapp.wl.shm);
+            _sapp.wl.cursor = wl_cursor_theme_get_cursor(cursor_theme, "left_ptr");
+            if (NULL == _sapp.wl.cursor) {
+                SOKOL_LOG("Warning: Unable to load cursor \"left_ptr\" from default cursor theme, will not be able to display cursor!");
+            } else {
+                struct wl_buffer *cursor_buffer = wl_cursor_image_get_buffer(_sapp.wl.cursor->images[0]);
+                wl_buffer_add_listener(cursor_buffer, &_sapp_wl_buffer_listener, NULL);
+                _sapp.wl.cursor_surface = wl_compositor_create_surface(_sapp.wl.compositor);
+                wl_surface_attach(_sapp.wl.cursor_surface, cursor_buffer, 0, 0);
+                wl_surface_commit(_sapp.wl.cursor_surface);
+            }
+        }
     } else if (!has_pointer && NULL != _sapp.wl.pointer) {
         wl_pointer_release(_sapp.wl.pointer);
         _sapp.wl.pointer = NULL;
@@ -11123,6 +11183,8 @@ _SOKOL_PRIVATE void _sapp_wl_registry_handle_global(void* data, struct wl_regist
                 _sapp.wl.max_outputs++;
             }
         }
+    } else if (0 == strcmp(interface, wl_shm_interface.name)) {
+        _sapp.wl.shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
     }
 }
 
@@ -11627,7 +11689,7 @@ SOKOL_API_IMPL void sapp_show_mouse(bool show) {
         #if !defined(SOKOL_WAYLAND)
         _sapp_x11_show_mouse(show);
         #else /* SOKOL_WAYLAND */
-        /* WL-TODO: _sapp_wl_show_mouse(show); */
+        _sapp_wl_show_mouse(show, _sapp.wl.serial);
         #endif /* SOKOL_WAYLAND */
         #elif defined(_SAPP_UWP)
         _sapp_uwp_show_mouse(show);
