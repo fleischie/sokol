@@ -136,7 +136,7 @@
     UPDATE_CURSOR       | YES     | YES   | TODO  | ---   | ---     | TODO | ---   | TODO
     IME                 | TODO    | TODO? | TODO  | ???   | TODO    | ---  | ???   | ???
     key repeat flag     | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
-    windowed            | YES     | YES   | YES²  | ---   | ---     | YES  | TODO  | YES
+    windowed            | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | YES
     fullscreen          | YES     | YES   | YES   | YES   | YES     | YES  | TODO  | ---
     mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | TODO
     mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
@@ -11848,7 +11848,7 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
         #if !defined(SOKOL_WAYLAND)
         _sapp_x11_update_window_title();
         #else /* SOKOL_WAYLAND */
-        /* WL-TODO: _sapp_wl_update_window_title(); */
+        xdg_toplevel_set_title(_sapp.wl.toplevel, title);
         #endif /* SOKOL_WAYLAND */
     #endif
 }
