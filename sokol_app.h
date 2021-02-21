@@ -110,8 +110,8 @@
                         | Windows | macOS | Linux |  iOS  | Android | UWP  | Raspi | HTML5
     --------------------+---------+-------+-------+-------+---------+------+-------+-------
     gl 3.x              | YES     | YES   | YES   | ---   | ---     | ---  | ---   | ---
-    gles2/webgl         | ---     | ---   | ---²  | YES   | YES     | ---  | TODO  | YES
-    gles3/webgl2        | ---     | ---   | ---²  | YES   | YES     | ---  | ---   | YES
+    gles2/webgl         | ---     | ---   | ---   | YES   | YES     | ---  | TODO  | YES
+    gles3/webgl2        | ---     | ---   | ---   | YES   | YES     | ---  | ---   | YES
     metal               | ---     | YES   | ---   | YES   | ---     | ---  | ---   | ---
     d3d11               | YES     | ---   | ---   | ---   | ---     | YES  | ---   | ---
     KEY_DOWN            | YES     | YES   | YES   | SOME  | TODO    | YES  | TODO  | YES
@@ -141,10 +141,10 @@
     mouse hide          | YES     | YES   | YES   | ---   | ---     | YES  | TODO  | TODO
     mouse lock          | YES     | YES   | YES   | ---   | ---     | TODO | TODO  | YES
     screen keyboard     | ---     | ---   | ---   | YES   | TODO    | TODO | ---   | YES
-    swap interval       | YES     | YES   | YES²  | YES   | TODO    | ---  | TODO  | YES
+    swap interval       | YES     | YES   | YES   | YES   | TODO    | ---  | TODO  | YES
     high-dpi            | YES     | YES   | YES¹  | YES   | YES     | YES  | TODO  | YES
     clipboard           | YES     | YES   | YES¹  | ---   | ---     | TODO | ---   | YES
-    MSAA                | YES     | YES   | YES²  | YES   | YES     | TODO | TODO  | YES
+    MSAA                | YES     | YES   | YES   | YES   | YES     | TODO | TODO  | YES
     drag'n'drop         | YES     | YES   | YES¹  | ---   | ---     | TODO | TODO  | YES
 
     ¹: Only on the wayland path.
@@ -1584,8 +1584,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <GLES2/gl2ext.h>
     #endif
 #elif defined(_SAPP_LINUX)
+    #define GL_GLEXT_PROTOTYPES
     #if !defined(SOKOL_WAYLAND)
-        #define GL_GLEXT_PROTOTYPES
         #include <X11/Xlib.h>
         #include <X11/Xutil.h>
         #include <X11/XKBlib.h>
@@ -11971,7 +11971,7 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
     }
 
     EGLint major, minor;
-    if (EGL_TRUE != eglInitialize(_sapp.wl.egl_display, &major, &minor)) {
+    if (EGL_FALSE == eglInitialize(_sapp.wl.egl_display, &major, &minor)) {
         _sapp_fail("eglInitialize() failed!\n");
     }
 
@@ -12044,7 +12044,7 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
         EGL_CONTEXT_MINOR_VERSION, 3,
         EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
 #else /* SOKOL_GLCORE33 */
-        EGL_CONTEXT_CLIENT_VERSION, desc->gl_force_gles ? 2 : 3,
+        EGL_CONTEXT_CLIENT_VERSION, desc->gl_force_gles2 ? 2 : 3,
 #endif /* SOKOL_GLCORE33 */
 
         EGL_NONE,
@@ -12069,10 +12069,15 @@ _SOKOL_PRIVATE void _sapp_wl_egl_setup(const sapp_desc* desc) {
         _sapp_fail("eglCreateWindowSurface() failed!\n");
     }
 
-    eglSwapInterval(_sapp.wl.display, 1);
     if (!eglMakeCurrent(_sapp.wl.egl_display, _sapp.wl.egl_surface, _sapp.wl.egl_surface, _sapp.wl.egl_context)) {
         _sapp_fail("eglMakeCurrent() failed!\n");
     }
+    eglSwapInterval(_sapp.wl.egl_display, _sapp.swap_interval);
+
+    int api_type, api_version;
+    eglQueryContext(_sapp.wl.egl_display, _sapp.wl.egl_context, EGL_CONTEXT_CLIENT_TYPE, &api_type);
+    eglQueryContext(_sapp.wl.egl_display, _sapp.wl.egl_context, EGL_CONTEXT_CLIENT_VERSION, &api_version);
+    _sapp.gles2_fallback = EGL_OPENGL_ES_API == api_type && 2 == api_version;
 }
 
 _SOKOL_PRIVATE void _sapp_wl_sighandler_setup(void) {
@@ -12139,6 +12144,7 @@ _SOKOL_PRIVATE void _sapp_linux_wl_run(const sapp_desc* desc) {
     _sapp_wl_cleanup();
     _sapp_discard_state();
 }
+
 #endif /* SOKOL_WAYLAND */
 
 _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
